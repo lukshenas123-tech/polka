@@ -1,6 +1,6 @@
 // Офлайн-режим: сначала сеть, при её отсутствии — сохранённая копия.
-const CACHE = "polka-v1";
-const SHELL = ["./", "index.html", "style.css", "classify.js", "app.js", "manifest.webmanifest", "icons/icon.svg"];
+const CACHE = "polka-v2";
+const SHELL = ["./", "index.html", "style.css", "classify.js", "reader.js", "app.js", "manifest.webmanifest", "icons/icon.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -32,7 +32,7 @@
 
     <form class="inbox" id="inbox" autocomplete="off">
       <label for="input" class="sr-only">Ссылка или текст</label>
-      <textarea id="input" rows="3" placeholder="Вставьте ссылку на пост, текст или свою мысль…"></textarea>
+      <textarea id="input" rows="4" placeholder="Вставьте ссылку на пост — я сама прочитаю и разложу. Можно несколько ссылок, каждую с новой строки. Или просто запишите мысль."></textarea>
       <div class="inbox-row">
         <button type="submit" class="primary" id="add">Разложить</button>
         <span class="or">или сразу в</span>
@@ -40,6 +40,11 @@
       </div>
       <p class="hint">Папку можно задать хэштегом: <code>#учеба</code>, <code>#посты</code>, <code>#идеи</code></p>
     </form>
+
+    <section class="pending" id="pending" hidden>
+      <h2 id="pending-title">Нужно решить</h2>
+      <ul class="list" id="pending-list"></ul>
+    </section>
 
     <nav class="tabs" id="tabs" aria-label="Папки"></nav>
 
@@ -52,8 +57,8 @@
 
     <section class="empty" id="empty" hidden>
       <h2>Полка пока пустая</h2>
-      <p>Вставьте сверху ссылку на пост из Telegram, статью, видео или просто запишите мысль — Полка сама решит, куда это положить.</p>
-      <p>Ошиблась с папкой — нажмите на нужную папку под записью.</p>
+      <p>В Telegram нажмите на пост → «Копировать ссылку» и вставьте её сюда. Полка сама откроет пост, прочитает и положит в нужную папку.</p>
+      <p>Если не поймёт, куда положить, — спросит и запомнит ваш ответ для этого канала.</p>
     </section>
 
     <details class="settings" id="settings">
@@ -77,6 +82,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="classify.js"></script>
+  <script src="reader.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

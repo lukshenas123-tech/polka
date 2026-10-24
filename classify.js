@@ -1,5 +1,6 @@
-// Определение папки для записи: по хэштегам, сайту и ключевым словам.
-// Если в настройках указан ключ Claude API — папку выбирает нейросеть.
+// Выбор папки для записи и уверенность в этом выборе.
+// Если уверенности нет — Полка спрашивает пользователя и запоминает ответ
+// для этого канала или сайта.
 
 const FOLDERS = {
   study: { name: "Учеба", tags: ["#учеба", "#учёба"] },
@@ -19,17 +20,29 @@ const POST_SITES = [
   "reddit.com", "vc.ru", "dzen.ru", "pikabu.ru", "tiktok.com", "facebook.com", "linkedin.com",
 ];
 
+// Начала слов (ищутся с начала слова, чтобы «иде» не находилось в «видео»)
 const KEYWORDS = {
-  study: ["курс", "лекци", "урок", "учеб", "учёб", "экзамен", "конспект", "задач", "домашк",
-          "семинар", "книг", "статья", "туториал", "tutorial", "гайд", "документаци", "learn",
-          "course", "lecture", "разбор", "как работает", "шпаргалк", "вебинар", "пример кода",
-          "алгоритм", "формул", "теори", "изучить", "выучить", "почитать по теме"],
-  ideas: ["иде", "мысль", "мысли", "придумал", "а что если", "можно сделать", "хочу", "план",
-          "todo", "заметка", "надо бы", "попробовать", "стартап", "проект", "сделать бы",
-          "не забыть", "напомни", "мечта", "цель"],
+  study: ["курс", "лекци", "урок", "учеб", "учёб", "обучени", "экзамен", "егэ", "огэ", "сесси",
+          "конспект", "задач", "домашк", "семинар", "книг", "стать", "туториал", "гайд",
+          "руководств", "документаци", "инструкци", "шпаргалк", "вебинар", "алгоритм", "формул",
+          "теори", "изучи", "выучи", "научи", "навык", "разбор", "объясн", "как работает",
+          "пример", "программир", "python", "javascript", "sql", "excel", "математ", "физик",
+          "грамматик", "исследовани", "learn", "course", "tutorial", "guide", "lecture", "how to",
+          "чек-лист", "чеклист", "конспект", "методич", "полезные материал", "подборка ресурс"],
+  ideas: ["иде", "мысл", "придумал", "а что если", "можно сделать", "хочу", "план", "todo",
+          "заметк", "надо бы", "попробовать", "стартап", "проект", "сделать бы", "не забыть",
+          "напомн", "мечт", "цел", "бизнес", "вдохнов", "концепт"],
   posts: ["пост", "канал", "подпис", "репост", "мем", "новост", "тред", "интервью", "обзор",
-          "смешн", "история", "реклам", "розыгрыш"],
+          "смешн", "юмор", "реклам", "розыгрыш", "заявил", "сообщил", "срочно", "трейлер",
+          "релиз", "анонс", "вышел", "вышла", "слух", "скандал", "прикол", "история о"],
 };
+
+const KEYWORD_RES = Object.fromEntries(
+  Object.entries(KEYWORDS).map(([k, words]) => [
+    k,
+    words.map((w) => new RegExp("(?<![\\p{L}\\d])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu")),
+  ])
+);
 
 const URL_RE = /https?:\/\/[^\s<>"']+|(?:^|\s)((?:t\.me|telegram\.me)\/[^\s<>"']+)/i;
 
@@ -49,15 +62,26 @@ function siteMatches(host, list) {
   return list.some((s) => host === s || host.endsWith("." + s));
 }
 
-// Ссылка на пост в Telegram → «@канал · пост 123»
+// Ссылка на Telegram → «@канал · пост 123»
 function telegramLabel(url) {
   if (!url || !siteMatches(hostOf(url), ["t.me", "telegram.me"])) return null;
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] === "s" || parts[0] === "c") parts.shift();
   if (!parts.length) return null;
-  const channel = parts[0];
   const post = parts[1] && /^\d+$/.test(parts[1]) ? parts[1] : null;
-  return post ? `@${channel} · пост ${post}` : `@${channel}`;
+  return post ? `@${parts[0]} · пост ${post}` : `@${parts[0]}`;
+}
+
+// Ключ источника для памяти: канал Telegram или домен сайта
+function sourceKeyOf(url) {
+  if (!url) return "";
+  const host = hostOf(url);
+  if (siteMatches(host, ["t.me", "telegram.me"])) {
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] === "s") parts.shift();
+    return parts[0] ? "tg:" + parts[0].toLowerCase() : "";
+  }
+  return host;
 }
 
 function tagFolder(text) {
@@ -68,60 +92,72 @@ function tagFolder(text) {
   return null;
 }
 
-function ruleClassify(text) {
-  const tagged = tagFolder(text);
-  if (tagged) return tagged;
+/**
+ * Оценивает запись.
+ * entry: { text — всё, что известно (ввод + прочитанный текст), url, hasOwnText }
+ * memory: { [sourceKey]: { study: n, posts: n, ideas: n } } — прошлые решения пользователя
+ * Возвращает { folder, sure, fromMemory }
+ */
+function scoreEntry(entry, memory = {}) {
+  const tagged = tagFolder(entry.text);
+  if (tagged) return { folder: tagged, sure: true };
 
-  const url = findUrl(text);
+  const url = entry.url;
   const host = hostOf(url);
-  const low = text.toLowerCase();
   const score = { study: 0, posts: 0, ideas: 0 };
 
-  if (host && siteMatches(host, STUDY_SITES)) score.study += 3;
-  if (host && siteMatches(host, POST_SITES)) score.posts += 2;
-  if (host && /(^|\.)(docs|learn|developer|wiki)\./.test(host + ".")) score.study += 2;
-  if (/\.pdf($|\?)/i.test(url ? url.pathname : "")) score.study += 2;
-
-  for (const [key, words] of Object.entries(KEYWORDS)) {
-    for (const w of words) if (low.includes(w)) score[key] += 1;
+  // Прошлые решения для этого канала/сайта — самый сильный сигнал
+  const past = memory[sourceKeyOf(url)];
+  let fromMemory = false;
+  if (past) {
+    const [fav, n] = Object.entries(past).sort((a, b) => b[1] - a[1])[0];
+    const total = Object.values(past).reduce((a, b) => a + b, 0);
+    if (n / total >= 0.6) { score[fav] += 4; fromMemory = true; }
   }
-  // Свой текст без ссылки чаще всего — мысль или заметка
-  if (!url) score.ideas += 1;
 
-  const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
-  if (best[1] > 0) return best[0];
-  return url ? "posts" : "ideas";
+  if (host && siteMatches(host, STUDY_SITES)) score.study += 3;
+  if (host && siteMatches(host, POST_SITES)) score.posts += 1;
+  if (host && /(^|\.)(docs|learn|developer|wiki)\./.test(host + ".")) score.study += 2;
+  if (url && /\.pdf($|\?)/i.test(url.pathname)) score.study += 2;
+  if (!url) score.ideas += 2; // свой текст без ссылки — обычно мысль
+
+  for (const [key, res] of Object.entries(KEYWORD_RES)) {
+    for (const re of res) if (re.test(entry.text)) score[key] += 1;
+  }
+
+  const [[best, b], [, second]] = Object.entries(score).sort((x, y) => y[1] - x[1]);
+  const sure = (b >= 2 && b - second >= 2) || (b >= 4 && b - second >= 1);
+  return { folder: b > 0 ? best : null, sure, fromMemory: fromMemory && sure };
 }
 
 // Короткое название для карточки
 function makeTitle(text) {
-  const url = findUrl(text);
-  const tg = telegramLabel(url);
   const firstLine = text
     .split("\n")
     .map((l) => l.replace(URL_RE, "").replace(/#[\p{L}\d_]+/gu, "").trim())
     .find((l) => l.length > 0);
-  if (firstLine) return firstLine.length > 80 ? firstLine.slice(0, 79) + "…" : firstLine;
+  if (firstLine) return firstLine.length > 90 ? firstLine.slice(0, 89) + "…" : firstLine;
+  const url = findUrl(text);
+  const tg = telegramLabel(url);
   if (tg) return tg;
   if (url) return hostOf(url) + (url.pathname.length > 1 ? url.pathname.replace(/\/$/, "") : "");
   return "Без названия";
 }
 
-// Классификация нейросетью. Возвращает null, если не получилось.
+// Классификация нейросетью. Возвращает { folder, sure } или бросает ошибку.
 async function aiClassify(text, apiKey) {
   const prompt = `Разложи сохранённую запись по одной из трёх папок:
 - study — учеба: материалы для изучения, курсы, лекции, статьи, туториалы, конспекты, книги, справочная информация.
 - posts — посты: интересные посты из каналов и соцсетей, новости, мемы, чужой контент «почитать/посмотреть».
 - ideas — идеи: собственные мысли, заметки, планы, задумки проектов, напоминания себе.
 
-Если дана только ссылка на Telegram-пост, ориентируйся на название канала.
-
 Запись:
 <entry>
 ${text.slice(0, 3000)}
 </entry>
 
-Ответь одним словом: study, posts или ideas.`;
+Ответь только JSON: {"folder": "study" | "posts" | "ideas", "sure": true | false}.
+"sure": false, если по записи трудно понять, куда её положить.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -133,16 +169,18 @@ ${text.slice(0, 3000)}
     },
     body: JSON.stringify({
       model: "claude-haiku-5-5",
-      max_tokens: 5,
+      max_tokens: 40,
       messages: [{ role: "user", content: prompt }],
     }),
   });
   if (!res.ok) throw new Error(`API ответил ${res.status}`);
   const data = await res.json();
-  const answer = (data.content?.[0]?.text || "").toLowerCase();
-  return Object.keys(FOLDERS).find((k) => answer.includes(k)) || null;
+  const raw = data.content?.[0]?.text || "";
+  const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+  if (!FOLDERS[json.folder]) throw new Error("непонятный ответ");
+  return { folder: json.folder, sure: json.sure !== false };
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { FOLDERS, ruleClassify, makeTitle, findUrl, telegramLabel, tagFolder, hostOf };
+  module.exports = { FOLDERS, scoreEntry, makeTitle, findUrl, telegramLabel, tagFolder, hostOf, sourceKeyOf };
 }
