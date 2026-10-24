@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Полка</title>
+  <meta name="description" content="Сохраняйте ссылки и посты — Полка сама разложит их по папкам: учеба, посты, идеи.">
+  <meta name="theme-color" content="#f3f4f8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14151c" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="3" y="6" width="7" height="20" rx="2" fill="var(--study)"/>
+          <rect x="12.5" y="10" width="7" height="16" rx="2" fill="var(--posts)"/>
+          <rect x="22" y="4" width="7" height="22" rx="2" fill="var(--ideas)"/>
+          <rect x="1" y="26" width="30" height="3" rx="1.5" fill="currentColor"/>
+        </svg>
+        <h1>Полка</h1>
+      </div>
+      <p class="total" id="total"></p>
+    </header>
+
+    <form class="inbox" id="inbox" autocomplete="off">
+      <label for="input" class="sr-only">Ссылка или текст</label>
+      <textarea id="input" rows="3" placeholder="Вставьте ссылку на пост, текст или свою мысль…"></textarea>
+      <div class="inbox-row">
+        <button type="submit" class="primary" id="add">Разложить</button>
+        <span class="or">или сразу в</span>
+        <div class="quick" id="quick"></div>
+      </div>
+      <p class="hint">Папку можно задать хэштегом: <code>#учеба</code>, <code>#посты</code>, <code>#идеи</code></p>
+    </form>
+
+    <nav class="tabs" id="tabs" aria-label="Папки"></nav>
+
+    <div class="search">
+      <label for="search" class="sr-only">Поиск</label>
+      <input id="search" type="search" placeholder="Поиск по полке">
+    </div>
+
+    <ul class="list" id="list"></ul>
+
+    <section class="empty" id="empty" hidden>
+      <h2>Полка пока пустая</h2>
+      <p>Вставьте сверху ссылку на пост из Telegram, статью, видео или просто запишите мысль — Полка сама решит, куда это положить.</p>
+      <p>Ошиблась с папкой — нажмите на нужную папку под записью.</p>
+    </section>
+
+    <details class="settings" id="settings">
+      <summary>Настройки и данные</summary>
+      <div class="settings-body">
+        <div class="field">
+          <label for="apikey">Ключ Claude API (необязательно)</label>
+          <input id="apikey" type="password" placeholder="sk-ant-…" autocomplete="off">
+          <p class="hint">С ключом папку выбирает нейросеть, без него — правила по словам и сайтам. Ключ хранится только в этом браузере.</p>
+        </div>
+        <div class="buttons">
+          <button type="button" id="export">Скачать копию (.json)</button>
+          <label class="button" for="import">Загрузить копию</label>
+          <input id="import" type="file" accept="application/json,.json" hidden>
+        </div>
+        <p class="hint">Записи хранятся в этом браузере. Чтобы перенести их на другое устройство, скачайте копию и загрузите её там.</p>
+      </div>
+    </details>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="classify.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
